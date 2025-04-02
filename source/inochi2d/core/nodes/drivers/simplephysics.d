@@ -114,12 +114,13 @@ class SpringPendulum : PhysicsSystem {
 private:
     vec2 bob = vec2(0, 0);
     vec2 dBob = vec2(0, 0);
-
+    vec2 lastPos = vec2(0,0);
 protected:
     override
     void eval(float t) {
         setD(bob, dBob);
-
+        vec2 o = driver.getOffset();
+        bob += o+(lastPos-driver.anchor+o)*driver.getVelocityInheritance();
         // These are normalized vs. mass
         float springKsqrt = driver.getFrequency() * 2 * PI;
         float springK = springKsqrt ^^ 2;
@@ -155,7 +156,7 @@ protected:
         );
 
         ddBob += ddBobDamping;
-
+        lastPos = driver.anchor+o;
         setD(dBob, ddBob);
     }
 
@@ -192,7 +193,7 @@ public:
 
     override
     void updateAnchor() {
-        bob = driver.anchor + vec2(0, driver.getLength());
+        bob = driver.anchor + vec2(0, driver.getLength())+driver.getOffset();
     }
 }
 
@@ -228,6 +229,16 @@ private:
     @Ignore
     vec2 offsetOutputScale = vec2(1, 1);
 
+    @Ignore 
+    float offsetVelocityInheritance = 0;
+
+    @Ignore 
+    float offsetX = 0;
+
+    @Ignore 
+    float offsetY = 0;
+
+
 protected:
     override
     string typeId() { return "SimplePhysics"; }
@@ -256,6 +267,12 @@ protected:
         serializer.serializeValue(lengthDamping);
         serializer.putKey("output_scale");
         outputScale.serialize(serializer);
+        serializer.putKey("velocity_inheritance");
+        serializer.serializeValue(velocityInheritance);//not working
+        serializer.putKey("offset_X");
+        serializer.serializeValue(offX);//not working 
+        serializer.putKey("offset_Y");
+        serializer.serializeValue(offY);//not working 
         serializer.putKey("local_only");
         serializer.serializeValue(localOnly);
     }
@@ -282,6 +299,12 @@ protected:
             if (auto exc = data["length_damping"].deserializeValue(this.lengthDamping)) return exc;
         if (!data["output_scale"].isEmpty)
             if (auto exc = outputScale.deserialize(data["output_scale"])) return exc;
+        if (!data["velocity_inheritance"].isEmpty)
+            if (auto exc = data["velocity_inheritance"].deserializeValue(this.velocityInheritance)) return exc;
+        if (!data["offset_X"].isEmpty)
+            if (auto exc = data["offset_X"].deserializeValue(this.offX)) return exc;
+        if (!data["offset_Y"].isEmpty)
+            if (auto exc = data["offset_Y"].deserializeValue(this.offY)) return exc;
         if (!data["local_only"].isEmpty)
             if (auto exc = data["local_only"].deserializeValue(this.localOnly)) return exc;
 
@@ -322,6 +345,9 @@ public:
     */
     float lengthDamping = 0.5;
     vec2 outputScale = vec2(1, 1);
+    float velocityInheritance = 0;
+    float offX = 0;
+    float offY = 0;
 
     @Ignore
     vec2 prevAnchor = vec2(0, 0);
@@ -363,6 +389,9 @@ public:
         offsetAngleDamping = 1;
         offsetLengthDamping = 1;
         offsetOutputScale = vec2(1, 1);
+        offsetVelocityInheritance = 0;
+        offsetX = 0;
+        offsetY = 0;
     }
 
     override
@@ -486,7 +515,9 @@ public:
             default: assert(0);
         }
 
-        param.pushIOffset(vec2(paramVal.x * oscale.x, paramVal.y * oscale.y), ParamMergeMode.Forced);
+        //paramVal += getOffset();
+        param.pushIOffset(vec2(paramVal.x * oscale.x, 
+            paramVal.y * oscale.y), ParamMergeMode.Forced);
         param.update();
     }
 
@@ -553,6 +584,9 @@ public:
             case "lengthDamping":
             case "outputScale.x":
             case "outputScale.y":
+            case "velocityInheritance":
+            case "offsetX":
+            case "offsetY":
                 return true;
             default:
                 return false;
@@ -573,6 +607,9 @@ public:
             case "outputScale.x":
             case "outputScale.y":
                 return 1;
+            case "velocityInheritance":
+            case "offsetX":
+            case "offsetY":
             case "length":
                 return 0;
             default: return float();
@@ -607,6 +644,15 @@ public:
             case "outputScale.y":
                 offsetOutputScale.y *= value;
                 return true;
+            case "velocityInheritance":
+                offsetVelocityInheritance += value;
+                return true;
+            case "offsetX":
+                offsetX += value;
+                return true;
+            case "offsetY":
+                offsetY += value;
+                return true;
             default: return false;
         }
     }
@@ -621,6 +667,9 @@ public:
             case "lengthDamping":   return offsetLengthDamping;
             case "outputScale.x":   return offsetOutputScale.x;
             case "outputScale.y":   return offsetOutputScale.y;
+            case "velocityInheritance": return offsetVelocityInheritance;
+            case "offsetX": return offsetX;
+            case "offsetY": return offsetY;
             default:                return super.getValue(key);
         }
     }
@@ -642,6 +691,10 @@ public:
 
     /// Gets the final length damping
     vec2 getOutputScale() { return outputScale * offsetOutputScale; }
+
+    float getVelocityInheritance() { return velocityInheritance + offsetVelocityInheritance; }
+
+    vec2 getOffset() { return vec2(offX+offsetX,offY+offsetY); }
 }
 
 mixin InNode!SimplePhysics;
